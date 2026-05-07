@@ -1,0 +1,2 @@
+fastapi==0.115.0
+dashaflow==1.1.0
