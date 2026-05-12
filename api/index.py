@@ -110,15 +110,19 @@ def career(data: BirthData):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from datetime import datetime, timedelta
+
 @app.post("/compatibility")
 def compatibility(data: CompatibilityData):
     """
     Ashtakoota Milan (36-point compatibility) between two profiles.
     """
     try:
+        p1 = data.p1
+        p2 = data.p2
         result = dashaflow.calculate_compatibility(
-            data.p1.model_dump(),
-            data.p2.model_dump()
+            p1.date_of_birth, p1.time_of_birth, p1.latitude, p1.longitude, p1.timezone,
+            p2.date_of_birth, p2.time_of_birth, p2.latitude, p2.longitude, p2.timezone
         )
         return {"status": "ok", "data": result}
     except Exception as e:
@@ -131,13 +135,40 @@ def muhurtha(data: MuhurthaData):
     Check auspicious timings (Muhurtha) for a given event and date window.
     """
     try:
-        result = dashaflow.check_muhurtha(
-            data.birth_data.model_dump(),
-            data.current_location_data.model_dump(),
-            data.event_type,
-            data.start_date,
-            data.end_date
-        )
-        return {"status": "ok", "data": result}
+        activity = data.event_type.lower()
+        if activity == "house warming":
+            activity = "house_entry"
+        elif activity == "vehicle purchase":
+            activity = "travel"
+        elif activity == "general" or activity == "property":
+            activity = "business"
+            
+        valid_activities = ['marriage', 'travel', 'business', 'education', 'house_entry', 'medical']
+        if activity not in valid_activities:
+            activity = "business"
+
+        start_date = datetime.strptime(data.start_date or str(date.today()), "%Y-%m-%d")
+        end_date = datetime.strptime(data.end_date or str(date.today()), "%Y-%m-%d")
+        
+        timings = []
+        loc = data.current_location_data
+        
+        current_date = start_date
+        while current_date <= end_date:
+            d_str = current_date.strftime("%Y-%m-%d")
+            res = dashaflow.check_muhurtha(
+                activity, d_str, "10:00", loc.latitude, loc.longitude, loc.timezone
+            )
+            # Only include if there are more positive than negative factors, or if it's explicitly auspicious
+            if res['total_positive'] > res['total_negative'] or res['verdict'] == 'auspicious':
+                timings.append({
+                    "date": d_str,
+                    "start_time": "09:00",
+                    "end_time": "12:00",
+                    "points": res['positive_factors']
+                })
+            current_date += timedelta(days=1)
+            
+        return {"status": "ok", "data": {"timings": timings}}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
