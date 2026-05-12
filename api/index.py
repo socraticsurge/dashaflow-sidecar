@@ -31,6 +31,19 @@ class TransitData(BaseModel):
     transit_date: str | None = None  # defaults to today
 
 
+class CompatibilityData(BaseModel):
+    p1: BirthData
+    p2: BirthData
+
+
+class MuhurthaData(BaseModel):
+    birth_data: BirthData
+    current_location_data: BirthData
+    event_type: str = "General"
+    start_date: str | None = None
+    end_date: str | None = None
+
+
 @app.get("/")
 @app.get("/health")
 def health():
@@ -91,6 +104,39 @@ def career(data: BirthData):
             data.latitude,
             data.longitude,
             data.timezone,
+        )
+        return {"status": "ok", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/compatibility")
+def compatibility(data: CompatibilityData):
+    """
+    Ashtakoota Milan (36-point compatibility) between two profiles.
+    """
+    try:
+        result = dashaflow.calculate_compatibility(
+            data.p1.model_dump(),
+            data.p2.model_dump()
+        )
+        return {"status": "ok", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/muhurtha")
+def muhurtha(data: MuhurthaData):
+    """
+    Check auspicious timings (Muhurtha) for a given event and date window.
+    """
+    try:
+        result = dashaflow.check_muhurtha(
+            data.birth_data.model_dump(),
+            data.current_location_data.model_dump(),
+            data.event_type,
+            data.start_date,
+            data.end_date
         )
         return {"status": "ok", "data": result}
     except Exception as e:
