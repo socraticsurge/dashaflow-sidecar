@@ -1,8 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime, timedelta
 import dashaflow
+import pytz
+import swisseph as swe
+from dashaflow.constants import (
+    DASHA_SEQUENCE,
+    NAK_SPAN,
+    VIMSHOTTARI_YEARS,
+)
+from dashaflow.dasha import _build_sub_periods
+from dashaflow.nakshatra import get_nakshatra
 
 app = FastAPI(title="DashaFlow Sidecar")
 
@@ -20,6 +29,11 @@ class BirthData(BaseModel):
     latitude: float
     longitude: float
     timezone: str = "UTC"
+    query_date: str | None = None
+
+
+class DashaSubperiodData(BirthData):
+    path: list[int]
 
 
 class TransitData(BaseModel):
@@ -63,8 +77,129 @@ def calculate(data: BirthData):
             data.latitude,
             data.longitude,
             data.timezone,
+            data.query_date,
         )
         return {"status": "ok", "data": chart}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _dasha_roots(data: BirthData):
+    """Rebuild DashaFlow's exact major-period inputs for lazy drill-down."""
+    local_tz = pytz.timezone(data.timezone)
+    naive_dt = datetime.strptime(
+        f"{data.date_of_birth} {data.time_of_birth}",
+        "%Y-%m-%d %H:%M",
+    )
+    local_dt = local_tz.localize(naive_dt)
+    utc_dt = local_dt.astimezone(pytz.utc)
+    hour = utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0
+
+    swe.set_ephe_path("")
+    swe.set_sid_mode(swe.SIDM_LAHIRI)
+    jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day, hour)
+    moon_result, _ = swe.calc_ut(
+        jd,
+        swe.MOON,
+        swe.FLG_SIDEREAL | swe.FLG_SPEED,
+    )
+    moon_longitude = moon_result[0]
+    nak_info = get_nakshatra(moon_longitude)
+    nak_lord = nak_info["lord"]
+    remaining_fraction = 1.0 - (
+        nak_info["degree_in_nakshatra"] / NAK_SPAN
+    )
+    sequence_start = DASHA_SEQUENCE.index(nak_lord)
+
+    birth_dt = local_dt.replace(tzinfo=None)
+    roots = []
+    cursor = birth_dt
+    first_days = VIMSHOTTARI_YEARS[nak_lord] * remaining_fraction * 365.2425
+    first_end = cursor + timedelta(days=first_days)
+    roots.append(
+        {
+            "planet": nak_lord,
+            "start": cursor.strftime("%Y-%m-%d"),
+            "end": first_end.strftime("%Y-%m-%d"),
+            "days": round(first_days, 2),
+        }
+    )
+    cursor = first_end
+
+    # Mirror DashaFlow 1.1.0's two-cycle major timeline, then trim at 120 years.
+    for cycle in range(2):
+        start_offset = 1 if cycle == 0 else 0
+        for index in range(start_offset, 9):
+            lord = DASHA_SEQUENCE[(sequence_start + index) % 9]
+            days = VIMSHOTTARI_YEARS[lord] * 365.2425
+            end = cursor + timedelta(days=days)
+            roots.append(
+                {
+                    "planet": lord,
+                    "start": cursor.strftime("%Y-%m-%d"),
+                    "end": end.strftime("%Y-%m-%d"),
+                    "days": days,
+                }
+            )
+            cursor = end
+
+    cutoff = birth_dt + timedelta(days=120 * 365.2425)
+    compact = []
+    for period in roots:
+        compact.append(period)
+        if datetime.strptime(period["end"], "%Y-%m-%d") > cutoff:
+            break
+    return compact
+
+
+def _children_for_path(data: DashaSubperiodData):
+    if not 1 <= len(data.path) <= 4:
+        raise ValueError("path must contain between 1 and 4 period indexes")
+    if any(index < 0 or index > 8 for index in data.path):
+        raise ValueError("each path index must be between 0 and 8")
+
+    roots = _dasha_roots(data)
+    if data.path[0] >= len(roots):
+        raise ValueError("root period index is outside the chart timeline")
+
+    parent = roots[data.path[0]]
+    for index in data.path[1:]:
+        candidates = _build_sub_periods(
+            datetime.strptime(parent["start"], "%Y-%m-%d"),
+            parent["days"],
+            parent["planet"],
+        )
+        parent = candidates[index]
+
+    children = _build_sub_periods(
+        datetime.strptime(parent["start"], "%Y-%m-%d"),
+        parent["days"],
+        parent["planet"],
+    )
+    return parent, children
+
+
+@app.post("/dasha-subperiods")
+def dasha_subperiods(data: DashaSubperiodData):
+    """
+    Return one lazy accordion level using DashaFlow's exact period builder.
+
+    A path of [2] returns the nine Antardashas for Mahadasha index 2.
+    [2, 4] returns the nine Pratyantardashas for its fifth Antardasha.
+    The maximum path length is four, whose children are Prana periods.
+    """
+    try:
+        parent, children = _children_for_path(data)
+        return {
+            "status": "ok",
+            "data": {
+                "path": data.path,
+                "parent": parent,
+                "children": children,
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -109,8 +244,6 @@ def career(data: BirthData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-from datetime import datetime, timedelta
 
 @app.post("/compatibility")
 def compatibility(data: CompatibilityData):
