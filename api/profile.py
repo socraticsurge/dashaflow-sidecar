@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hmac
 import math
-import os
 import re
 from collections.abc import Mapping
 from datetime import date, datetime, time, timezone
@@ -22,6 +20,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from api.contract_auth import require_api_token
 
 
 PROFILE_DERIVE_PATH = "/v1/profile/derive"
@@ -177,32 +177,10 @@ class _ProjectionError(Exception):
 def _require_api_token(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> None:
-    expected = os.environ.get("DASHAFLOW_API_TOKEN")
-    if (
-        not expected
-        or not expected.isascii()
-        or expected != expected.strip()
-        or any(char.isspace() for char in expected)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Profile derivation is not configured.",
-        )
-
-    scheme, separator, supplied = (authorization or "").partition(" ")
-    valid_shape = (
-        separator == " "
-        and scheme.casefold() == "bearer"
-        and bool(supplied)
-        and supplied.isascii()
-        and not any(char.isspace() for char in supplied)
+    require_api_token(
+        authorization,
+        unavailable_detail="Profile derivation is not configured.",
     )
-    if not valid_shape or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 def _record(value: Any) -> Mapping[str, Any]:
@@ -248,15 +226,19 @@ def _engine_version() -> str:
     return value
 
 
-def _ephemeris_used(data: ProfileDeriveRequest) -> str:
+def _ephemeris_used_for_local_time(
+    date_text: str,
+    time_text: str,
+    timezone_name: str,
+) -> str:
     """Probe Swiss Ephemeris once and classify its actual returned flag."""
 
     try:
         naive_datetime = datetime.combine(
-            date.fromisoformat(data.date_of_birth),
-            time.fromisoformat(data.time_of_birth),
+            date.fromisoformat(date_text),
+            time.fromisoformat(time_text),
         )
-        local_datetime = pytz.timezone(data.timezone).localize(
+        local_datetime = pytz.timezone(timezone_name).localize(
             naive_datetime,
             is_dst=None,
         )
@@ -290,12 +272,19 @@ def _ephemeris_used(data: ProfileDeriveRequest) -> str:
     return "unknown"
 
 
-def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
+def _ephemeris_used(data: ProfileDeriveRequest) -> str:
+    return _ephemeris_used_for_local_time(
+        data.date_of_birth,
+        data.time_of_birth,
+        data.timezone,
+    )
+
+
+def _project_chart_snapshot(chart: Any) -> dict[str, Any]:
     source = _record(chart)
     metadata = _record(source.get("metadata"))
     lagna = _record(source.get("lagna"))
     planets = _record(source.get("planets"))
-    moon = _record(planets.get("Moon"))
 
     ayanamsha = metadata.get("ayanamsha")
     if ayanamsha != "Lahiri":
@@ -318,11 +307,27 @@ def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
         )
 
     return {
+        "ayanamsha": ayanamsha,
+        "lagna": {
+            "rashi": _canonical_name(lagna.get("sign"), _RASHI_ALIASES),
+            "degree": _finite_degree(lagna.get("degree")),
+        },
+        "planets": projected_planets,
+    }
+
+
+def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
+    source = _record(chart)
+    planets = _record(source.get("planets"))
+    moon = _record(planets.get("Moon"))
+    snapshot = _project_chart_snapshot(chart)
+
+    return {
         "contract_version": CONTRACT_VERSION,
         "engine": {
             "name": "DashaFlow",
             "version": _engine_version(),
-            "ayanamsha": ayanamsha,
+            "ayanamsha": snapshot["ayanamsha"],
             "ephemeris": ephemeris,
         },
         "data": {
@@ -332,9 +337,9 @@ def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
             ),
             "pada": _pada(moon.get("pada")),
             "janma_rashi": _canonical_name(moon.get("sign"), _RASHI_ALIASES),
-            "lagna": _canonical_name(lagna.get("sign"), _RASHI_ALIASES),
-            "lagna_degree": _finite_degree(lagna.get("degree")),
-            "planets": projected_planets,
+            "lagna": snapshot["lagna"]["rashi"],
+            "lagna_degree": snapshot["lagna"]["degree"],
+            "planets": snapshot["planets"],
         },
     }
 

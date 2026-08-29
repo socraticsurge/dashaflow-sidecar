@@ -7,6 +7,10 @@ from pydantic import BaseModel
 from datetime import date
 import dashaflow
 
+from api.election_chart import (
+    ELECTION_CHART_DERIVE_PATH,
+    router as election_chart_router,
+)
 from api.profile import PROFILE_DERIVE_PATH, router as profile_router
 
 app = FastAPI(title="DashaFlow Sidecar")
@@ -19,23 +23,30 @@ app.add_middleware(
 )
 
 app.include_router(profile_router)
+app.include_router(election_chart_router)
 
 
-def _is_profile_derive_path(path: str) -> bool:
-    return path.rstrip("/") == PROFILE_DERIVE_PATH
+_PRIVATE_CONTRACT_PATHS = {
+    PROFILE_DERIVE_PATH,
+    ELECTION_CHART_DERIVE_PATH,
+}
+
+
+def _is_private_contract_path(path: str) -> bool:
+    return path.rstrip("/") in _PRIVATE_CONTRACT_PATHS
 
 
 @app.middleware("http")
-async def protect_profile_responses(request: Request, call_next):
+async def protect_contract_responses(request: Request, call_next):
     response = await call_next(request)
-    if _is_profile_derive_path(request.url.path):
+    if _is_private_contract_path(request.url.path):
         response.headers["Cache-Control"] = "private, no-store"
     return response
 
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, exc: RequestValidationError):
-    if _is_profile_derive_path(request.url.path):
+    if _is_private_contract_path(request.url.path):
         return JSONResponse(status_code=422, content={"detail": "Invalid request."})
     return await request_validation_exception_handler(request, exc)
 

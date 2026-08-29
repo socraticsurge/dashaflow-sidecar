@@ -15,6 +15,8 @@ via the `DASHAFLOW_SIDECAR_URL` environment variable.
 - `POST /transit`, `/career`, `/compatibility`, and `/muhurtha` — legacy application
   routes; their request, response, and authentication behavior is unchanged
 - `POST /v1/profile/derive` — minimal server-to-server birth-profile contract described below
+- `POST /v1/election-chart/derive` — bounded server-to-server election-chart batch
+  described below
 
 ## Profile derivation contract (`1.0`)
 
@@ -83,10 +85,11 @@ text is returned.
 ### Authentication and rollout
 
 Set a high-entropy `DASHAFLOW_API_TOKEN` in the sidecar environment and send it
-as `Authorization: Bearer <token>`. This authentication applies only to
-`/v1/profile/derive`; all legacy routes remain compatible. Missing, malformed,
-or incorrect credentials return `401`. If `DASHAFLOW_API_TOKEN` itself is absent
-or malformed, the endpoint fails closed with `503`.
+as `Authorization: Bearer <token>`. This authentication applies to the private
+`/v1/profile/derive` and `/v1/election-chart/derive` contracts; all legacy routes
+remain compatible. Missing, malformed, or incorrect credentials return `401`.
+If `DASHAFLOW_API_TOKEN` itself is absent or malformed, either contract fails
+closed with `503`.
 
 The token is a server-to-server secret and must never be embedded in browser
 code or a `VITE_*` variable. Roll out in this order:
@@ -98,6 +101,87 @@ code or a `VITE_*` variable. Roll out in this order:
    `DASHAFLOW_SIDECAR_TOKEN`) together with `DASHAFLOW_SIDECAR_URL`.
 4. Deploy the caller and verify the public gateway; rotate both token settings
    together when rotation is needed.
+
+## Election-chart contract (`1.0`)
+
+`POST /v1/election-chart/derive` accepts exactly a contract version, one
+calculation location, and one to 24 candidate instants:
+
+```json
+{
+  "contract_version": "1.0",
+  "location": {
+    "latitude": 17.385,
+    "longitude": 78.4867,
+    "timezone": "Asia/Kolkata"
+  },
+  "instants": [
+    "2026-09-08T05:29:00.000Z",
+    "2026-09-08T06:19:00+00:00"
+  ]
+}
+```
+
+Instants must be offset-aware RFC3339 timestamps and identify distinct absolute
+moments. DashaFlow accepts minute-resolution chart times, so seconds and any
+fractional seconds must be zero rather than being silently discarded. Each
+instant must fall between 366 days before and 1,830 days after the server's
+current UTC time, inclusive. The location follows the same numeric coordinate
+and IANA-timezone validation as profile derivation. Extra fields are rejected.
+
+Each instant is converted to local civil time in `location.timezone` for the
+calculation. The response preserves the exact request strings and order, so a
+caller can join each chart to its candidate without relying on array sorting or
+timestamp reformatting:
+
+```json
+{
+  "contract_version": "1.0",
+  "engine": {
+    "name": "DashaFlow",
+    "version": "1.1.0",
+    "ayanamsha": "Lahiri",
+    "ephemeris": "moshier"
+  },
+  "house_system": "whole_sign",
+  "location": {
+    "latitude": 17.385,
+    "longitude": 78.4867,
+    "timezone": "Asia/Kolkata"
+  },
+  "data": {
+    "charts": [
+      {
+        "instant": "2026-09-08T05:29:00.000Z",
+        "lagna": {"rashi": "Vrischika", "degree": 12.5},
+        "planets": [
+          {
+            "name": "Surya",
+            "rashi": "Simha",
+            "degree": 21.4,
+            "house": 10,
+            "retrograde": false
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The actual `planets` array always contains the same canonical nine-graha order
+as profile derivation: `Surya`, `Chandra`, `Kuja`, `Budha`, `Guru`, `Shukra`,
+`Shani`, `Rahu`, `Ketu`. Houses are derived using the whole-sign convention from
+the returned Lagna and Rashi, rather than forwarding an undocumented engine
+field. `ephemeris` is `swiss`, `moshier`, or `unknown` when all snapshots agree,
+and `mixed` when a batch crosses ephemeris sources.
+
+This is an astronomical projection contract, not a Muhurtam scoring endpoint.
+It accepts no activity, profile, name, natal-chart, or birth data. Invalid bodies
+return a sanitized `422`; unavailable calculations return a sanitized `502`.
+Every response on the path, including errors, carries
+`Cache-Control: private, no-store`, and raw engine exceptions are neither logged
+nor returned.
 
 ## Local
 
