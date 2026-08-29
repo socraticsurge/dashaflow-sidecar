@@ -257,6 +257,47 @@ def test_invalid_json_uses_the_same_safe_error_contract(
     calculate.assert_not_called()
 
 
+def test_unauthenticated_profile_body_is_rejected_before_validation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+
+    response = client.post(
+        PROFILE_PATH,
+        content='{"date_of_birth":"private-invalid-json"',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized."}
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert "private-invalid-json" not in response.text
+    calculate.assert_not_called()
+
+
+def test_authenticated_oversized_profile_body_is_rejected_before_projection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    private_marker = "private-oversized-profile-body"
+    body = '{"padding":"' + private_marker + ('x' * 17_000) + '"}'
+
+    response = client.post(
+        PROFILE_PATH,
+        content=body,
+        headers={**AUTHORIZATION, "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body is too large."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert private_marker not in response.text
+    calculate.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "replacement",
     [
@@ -330,6 +371,38 @@ def test_malformed_engine_projection_fails_safely(
     assert response.headers["Cache-Control"] == "private, no-store"
     assert "not-a-rashi" not in response.text
     calculate.assert_called_once()
+
+
+def test_profile_projection_accepts_engine_rounded_sign_boundary(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chart = chart_fixture()
+    chart['lagna']['degree'] = 30.0
+    chart['planets']['Moon']['degree'] = 30.0
+    monkeypatch.setattr(
+        profile.dashaflow,
+        'calculate_vedic_chart',
+        Mock(return_value=chart),
+    )
+    monkeypatch.setattr(
+        profile.swe,
+        'calc_ut',
+        Mock(return_value=((0.0,), profile.swe.FLG_SWIEPH)),
+    )
+
+    response = client.post(PROFILE_PATH, json=VALID_REQUEST, headers=AUTHORIZATION)
+
+    assert response.status_code == 200
+    data = response.json()['data']
+    assert data['lagna'] == 'Vrischika'
+    assert 29.99 < data['lagna_degree'] < 30
+    moon = next(
+        planet for planet in data['planets']
+        if planet['name'] == 'Chandra'
+    )
+    assert moon['rashi'] == 'Vrishabha'
+    assert 29.99 < moon['degree'] < 30
 
 
 def test_legacy_routes_remain_unauthenticated_and_compatible(

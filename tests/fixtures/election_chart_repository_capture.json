@@ -4,7 +4,8 @@
     "captured_with": {
       "dashaflow": "1.1.0",
       "ayanamsha": "Lahiri",
-      "house_system": "whole_sign"
+      "house_system": "whole_sign",
+      "node_convention": "mean"
     },
     "degree_tolerance": 0.01,
     "validation_boundary": "This is a reproducibility capture of the pinned repository engine, not independent astronomical or traditional-source validation.",

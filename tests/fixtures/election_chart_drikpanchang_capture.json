@@ -1,0 +1,121 @@
+{
+  "capture_version": "1.0",
+  "captured_on": "2026-08-29",
+  "source": "Drik Panchang sidereal planetary positions",
+  "source_conventions": {
+    "zodiac": "sidereal",
+    "ayanamsha": "Lahiri/Chitra Paksha",
+    "node_convention": "mean"
+  },
+  "comparison_scope": "Exact rashi agreement for Lagna and the canonical nine planets; degree-within-rashi agreement within 0.30 degrees for Lagna and 0.03 degrees for planets. Drik Panchang values were captured at exact minute precision from the dated URLs below.",
+  "boundary_scope": "Known minute-level Lagna convention differences are captured separately. They are not passing Lagna-equivalence cases; consumers must choose and disclose a house-frame authority.",
+  "boundary_cases": [
+    {
+      "id": "hyderabad-2026-01-15-1019-boundary",
+      "source_url": "https://www.drikpanchang.com/planet/position/planetary-positions-sidereal.html?geoname-id=1269843&date=15%2F01%2F2026&time=10%3A19%3A00&lang=en",
+      "transition_url": "https://www.drikpanchang.com/muhurat/lagna.html?geoname-id=1269843&date=15%2F01%2F2026&time-format=24hour&lang=en",
+      "local_time": "2026-01-15T10:19:00+05:30",
+      "location": {
+        "latitude": 17.385,
+        "longitude": 78.4867,
+        "timezone": "Asia/Kolkata"
+      },
+      "instant": "2026-01-15T04:49:00.000Z",
+      "expected_drik_lagna": "Meena",
+      "expected_dashaflow_lagna": "Kumbha",
+      "relevant_planet_rashis": {"Ketu": "Simha"}
+    },
+    {
+      "id": "sydney-2026-05-28-1435-boundary",
+      "source_url": "https://www.drikpanchang.com/planet/position/planetary-positions-sidereal.html?geoname-id=2147714&date=28%2F05%2F2026&time=14%3A35%3A00&lang=en",
+      "transition_url": "https://www.drikpanchang.com/muhurat/lagna.html?geoname-id=2147714&date=28%2F05%2F2026&time-format=24hour&lang=en",
+      "local_time": "2026-05-28T14:35:00+10:00",
+      "location": {
+        "latitude": -33.8688,
+        "longitude": 151.2093,
+        "timezone": "Australia/Sydney"
+      },
+      "instant": "2026-05-28T04:35:00.000Z",
+      "expected_drik_lagna": "Tula",
+      "expected_dashaflow_lagna": "Kanya",
+      "relevant_planet_rashis": {"Kuja": "Mesha", "Chandra": "Tula"}
+    }
+  ],
+  "cases": [
+    {
+      "id": "hyderabad-2026-08-27-1348",
+      "source_url": "https://www.drikpanchang.com/planet/position/planetary-positions-sidereal.html?geoname-id=1269843&date=27%2F08%2F2026&time=13%3A48%3A00",
+      "local_time": "2026-08-27T13:48:00+05:30",
+      "location": {
+        "latitude": 17.38405,
+        "longitude": 78.45636,
+        "timezone": "Asia/Kolkata"
+      },
+      "instant": "2026-08-27T08:18:00.000Z",
+      "expected": {
+        "lagna": {"rashi": "Vrischika", "degree": 27.540306},
+        "planets": {
+          "Surya": {"rashi": "Simha", "degree": 9.861911},
+          "Chandra": {"rashi": "Kumbha", "degree": 0.111011},
+          "Kuja": {"rashi": "Mithuna", "degree": 16.190506},
+          "Budha": {"rashi": "Simha", "degree": 9.497844},
+          "Guru": {"rashi": "Karka", "degree": 18.479386},
+          "Shukra": {"rashi": "Kanya", "degree": 25.091417},
+          "Shani": {"rashi": "Meena", "degree": 19.692558},
+          "Rahu": {"rashi": "Kumbha", "degree": 5.311717},
+          "Ketu": {"rashi": "Simha", "degree": 5.311717}
+        }
+      }
+    },
+    {
+      "id": "hyderabad-2026-08-28-0339",
+      "source_url": "https://www.drikpanchang.com/planet/position/planetary-positions-sidereal.html?geoname-id=1269843&date=28%2F08%2F2026&time=03%3A39%3A00",
+      "local_time": "2026-08-28T03:39:00+05:30",
+      "location": {
+        "latitude": 17.38405,
+        "longitude": 78.45636,
+        "timezone": "Asia/Kolkata"
+      },
+      "instant": "2026-08-27T22:09:00.000Z",
+      "expected": {
+        "lagna": {"rashi": "Karka", "degree": 7.099597},
+        "planets": {
+          "Surya": {"rashi": "Simha", "degree": 10.418611},
+          "Chandra": {"rashi": "Kumbha", "degree": 7.405},
+          "Kuja": {"rashi": "Mithuna", "degree": 16.56},
+          "Budha": {"rashi": "Simha", "degree": 10.630278},
+          "Guru": {"rashi": "Karka", "degree": 18.601944},
+          "Shukra": {"rashi": "Kanya", "degree": 25.581389},
+          "Shani": {"rashi": "Meena", "degree": 19.663056},
+          "Rahu": {"rashi": "Kumbha", "degree": 5.281111},
+          "Ketu": {"rashi": "Simha", "degree": 5.281111}
+        }
+      }
+    },
+    {
+      "id": "washington-dc-2026-07-14-0330",
+      "source_url": "https://www.drikpanchang.com/planet/position/planetary-positions-sidereal.html?geoname-id=4140963&date=14%2F07%2F2026&time=03%3A30%3A00",
+      "local_time": "2026-07-14T03:30:00-04:00",
+      "location": {
+        "latitude": 38.89511,
+        "longitude": -77.03637,
+        "timezone": "America/New_York"
+      },
+      "instant": "2026-07-14T07:30:00.000Z",
+      "expected": {
+        "lagna": {"rashi": "Vrishabha", "degree": 24.168381},
+        "planets": {
+          "Surya": {"rashi": "Mithuna", "degree": 27.664167},
+          "Chandra": {"rashi": "Mithuna", "degree": 26.37},
+          "Kuja": {"rashi": "Vrishabha", "degree": 16.697222},
+          "Budha": {"rashi": "Mithuna", "degree": 25.670556},
+          "Guru": {"rashi": "Karka", "degree": 8.818611},
+          "Shukra": {"rashi": "Simha", "degree": 10.851667},
+          "Shani": {"rashi": "Meena", "degree": 20.382222},
+          "Rahu": {"rashi": "Kumbha", "degree": 7.645},
+          "Ketu": {"rashi": "Simha", "degree": 7.645}
+        }
+      }
+    }
+  ]
+}

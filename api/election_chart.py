@@ -183,6 +183,7 @@ def derive_election_charts(data: ElectionChartDeriveRequest) -> dict[str, Any]:
                 "version": _engine_version(),
                 "ayanamsha": "Lahiri",
                 "ephemeris": _aggregate_ephemeris(ephemerides),
+                "node_convention": "mean",
             },
             "house_system": "whole_sign",
             "location": {

@@ -202,8 +202,15 @@ def _finite_degree(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise _ProjectionError
     result = float(value)
-    if not math.isfinite(result) or not 0 <= result < 30:
+    if not math.isfinite(result) or not 0 <= result <= 30:
         raise _ProjectionError
+    # DashaFlow 1.1.0 rounds a within-sign value to two decimals after it has
+    # already selected the sign. Values from 29.995 degrees can therefore be
+    # represented as exactly 30.0 with the still-correct preceding sign. Keep
+    # that sign and normalize only this known rounded-boundary representation
+    # to the largest finite value below 30; larger values remain malformed.
+    if result == 30:
+        return math.nextafter(30.0, 0.0)
     return result
 
 

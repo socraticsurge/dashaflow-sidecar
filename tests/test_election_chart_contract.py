@@ -19,6 +19,9 @@ FIXED_NOW = datetime(2026, 8, 29, 0, 0, tzinfo=timezone.utc)
 REPOSITORY_CAPTURE_PATH = (
     Path(__file__).parent / "fixtures" / "election_chart_repository_capture.json"
 )
+DRIKPANCHANG_CAPTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "election_chart_drikpanchang_capture.json"
+)
 VALID_REQUEST = {
     "contract_version": "1.0",
     "location": {
@@ -108,6 +111,11 @@ def repository_capture() -> dict:
     return json.loads(REPOSITORY_CAPTURE_PATH.read_text(encoding="utf-8"))
 
 
+@pytest.fixture(scope="module")
+def drikpanchang_capture() -> dict:
+    return json.loads(DRIKPANCHANG_CAPTURE_PATH.read_text(encoding="utf-8"))
+
+
 def assert_chart_matches_repository_capture(
     actual: dict,
     expected: dict,
@@ -133,6 +141,78 @@ def assert_chart_matches_repository_capture(
         expected_planets["degrees"],
         abs=degree_tolerance,
     )
+
+
+def test_real_engine_matches_drikpanchang_across_dates_and_cities(
+    client: TestClient,
+    drikpanchang_capture: dict,
+) -> None:
+    """Lock the sign-level election inputs to dated external references."""
+    assert drikpanchang_capture["source_conventions"] == {
+        "zodiac": "sidereal",
+        "ayanamsha": "Lahiri/Chitra Paksha",
+        "node_convention": "mean",
+    }
+    assert len({case["location"]["timezone"] for case in drikpanchang_capture["cases"]}) > 1
+
+    for case in drikpanchang_capture["cases"]:
+        response = client.post(
+            ELECTION_PATH,
+            json={
+                "contract_version": "1.0",
+                "location": case["location"],
+                "instants": [case["instant"]],
+            },
+            headers=AUTHORIZATION,
+        )
+        assert response.status_code == 200, case["id"]
+        contract = response.json()
+        assert contract["engine"]["ayanamsha"] == "Lahiri"
+        assert contract["engine"]["node_convention"] == "mean"
+        chart = contract["data"]["charts"][0]
+        expected = case["expected"]
+        assert chart["lagna"]["rashi"] == expected["lagna"]["rashi"], case["id"]
+        assert chart["lagna"]["degree"] == pytest.approx(
+            expected["lagna"]["degree"], abs=0.30,
+        ), case["id"]
+        actual_planets = {planet["name"]: planet for planet in chart["planets"]}
+        assert set(actual_planets) == set(expected["planets"])
+        for name, expected_planet in expected["planets"].items():
+            actual_planet = actual_planets[name]
+            assert actual_planet["rashi"] == expected_planet["rashi"], (
+                case["id"], name
+            )
+            assert actual_planet["degree"] == pytest.approx(
+                expected_planet["degree"], abs=0.03,
+            ), (case["id"], name)
+
+
+def test_real_engine_preserves_documented_drik_lagna_boundary_differences(
+    client: TestClient,
+    drikpanchang_capture: dict,
+) -> None:
+    """Lock known differences so an interior comparison cannot imply identity."""
+    assert "not passing Lagna-equivalence cases" in drikpanchang_capture[
+        "boundary_scope"
+    ]
+    assert len(drikpanchang_capture["boundary_cases"]) == 2
+    for case in drikpanchang_capture["boundary_cases"]:
+        response = client.post(
+            ELECTION_PATH,
+            json={
+                "contract_version": "1.0",
+                "location": case["location"],
+                "instants": [case["instant"]],
+            },
+            headers=AUTHORIZATION,
+        )
+        assert response.status_code == 200, case["id"]
+        chart = response.json()["data"]["charts"][0]
+        assert chart["lagna"]["rashi"] == case["expected_dashaflow_lagna"]
+        assert chart["lagna"]["rashi"] != case["expected_drik_lagna"]
+        actual_planets = {planet["name"]: planet for planet in chart["planets"]}
+        for name, rashi in case["relevant_planet_rashis"].items():
+            assert actual_planets[name]["rashi"] == rashi, (case["id"], name)
 
 
 def test_success_returns_ordered_minimal_whole_sign_snapshots(
@@ -161,6 +241,7 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
             "version": "1.1.0",
             "ayanamsha": "Lahiri",
             "ephemeris": "mixed",
+            "node_convention": "mean",
         },
         "house_system": "whole_sign",
         "data": {
@@ -370,6 +451,7 @@ def test_repository_engine_capture_is_repeatable_across_locations_and_boundaries
             "version": "1.1.0",
             "ayanamsha": "Lahiri",
             "ephemeris": case["expected"]["ephemeris"],
+            "node_convention": "mean",
         }
         assert len(actual["data"]["charts"]) == len(case["expected"]["charts"])
         for actual_chart, expected_chart in zip(
@@ -584,6 +666,73 @@ def test_invalid_json_uses_the_same_safe_error_contract(
     calculate.assert_not_called()
 
 
+def test_unauthenticated_invalid_body_is_rejected_before_validation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+
+    response = client.post(
+        ELECTION_PATH,
+        content='{"instants":["private-invalid-json"',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized."}
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert "private-invalid-json" not in response.text
+    calculate.assert_not_called()
+
+
+def test_authenticated_oversized_body_is_rejected_before_projection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    private_marker = "private-oversized-event-body"
+    body = '{"padding":"' + private_marker + ('x' * 17_000) + '"}'
+
+    response = client.post(
+        ELECTION_PATH,
+        content=body,
+        headers={**AUTHORIZATION, "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body is too large."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert private_marker not in response.text
+    calculate.assert_not_called()
+
+
+def test_authenticated_chunked_oversized_body_gets_sanitized_413(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    private_marker = "private-streamed-event-body"
+    chunks = iter([
+        b'{"padding":"',
+        private_marker.encode("utf-8"),
+        b"x" * 17_000,
+        b'"}',
+    ])
+
+    response = client.post(
+        ELECTION_PATH,
+        content=chunks,
+        headers={**AUTHORIZATION, "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body is too large."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert private_marker not in response.text
+    calculate.assert_not_called()
+
+
 def test_engine_exception_is_not_returned_or_logged_by_the_endpoint(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -634,3 +783,37 @@ def test_malformed_engine_projection_fails_safely(
     assert response.headers["Cache-Control"] == "private, no-store"
     assert "not-a-rashi" not in response.text
     calculate.assert_called_once()
+
+
+def test_rounded_thirty_degree_boundary_preserves_engine_sign(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chart = chart_fixture()
+    chart['lagna']['degree'] = 30.0
+    chart['planets']['Moon']['degree'] = 30.0
+    monkeypatch.setattr(
+        election_chart.dashaflow,
+        'calculate_vedic_chart',
+        Mock(return_value=chart),
+    )
+    monkeypatch.setattr(
+        election_chart,
+        '_ephemeris_used_for_local_time',
+        Mock(return_value='swiss'),
+    )
+    request = deepcopy(VALID_REQUEST)
+    request['instants'] = ['2026-09-09T22:59:00.000Z']
+
+    response = client.post(ELECTION_PATH, json=request, headers=AUTHORIZATION)
+
+    assert response.status_code == 200
+    snapshot = response.json()['data']['charts'][0]
+    assert snapshot['lagna']['rashi'] == 'Vrischika'
+    assert 29.99 < snapshot['lagna']['degree'] < 30
+    moon = next(
+        planet for planet in snapshot['planets']
+        if planet['name'] == 'Chandra'
+    )
+    assert moon['rashi'] == 'Vrishabha'
+    assert 29.99 < moon['degree'] < 30

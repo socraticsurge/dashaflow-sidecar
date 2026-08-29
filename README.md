@@ -150,7 +150,8 @@ reformatting:
     "name": "DashaFlow",
     "version": "1.1.0",
     "ayanamsha": "Lahiri",
-    "ephemeris": "moshier"
+    "ephemeris": "moshier",
+    "node_convention": "mean"
   },
   "house_system": "whole_sign",
   "location": {
@@ -183,11 +184,18 @@ as profile derivation: `Surya`, `Chandra`, `Kuja`, `Budha`, `Guru`, `Shukra`,
 `Shani`, `Rahu`, `Ketu`. Houses are derived using the whole-sign convention from
 the returned Lagna and Rashi, rather than forwarding an undocumented engine
 field. `ephemeris` is `swiss`, `moshier`, or `unknown` when all snapshots agree,
-and `mixed` when a batch crosses ephemeris sources.
+and `mixed` when a batch crosses ephemeris sources. `node_convention` is
+contract-bound to `mean`; callers must reject another value rather than blend
+different Rahu/Ketu conventions into one scoring run. DashaFlow rounds
+within-sign degrees to two decimals, so the sidecar normalizes the engine's
+legitimate boundary representation of `30.0` to the largest value below 30
+while preserving the sign the engine selected. Values greater than 30 remain
+malformed.
 
 This is an astronomical projection contract, not a Muhurtam scoring endpoint.
 It accepts no activity, profile, name, natal-chart, or birth data. Invalid bodies
-return a sanitized `422`; unavailable calculations return a sanitized `502`.
+return a sanitized `422`, private-contract bodies above 16 KiB return a
+sanitized `413`, and unavailable calculations return a sanitized `502`.
 Every response on the path, including errors, carries
 `Cache-Control: private, no-store`, and raw engine exceptions are neither logged
 nor returned.
