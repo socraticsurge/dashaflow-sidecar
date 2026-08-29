@@ -1,8 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from datetime import date
 import dashaflow
+
+from api.profile import PROFILE_DERIVE_PATH, router as profile_router
 
 app = FastAPI(title="DashaFlow Sidecar")
 
@@ -12,6 +17,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(profile_router)
+
+
+def _is_profile_derive_path(path: str) -> bool:
+    return path.rstrip("/") == PROFILE_DERIVE_PATH
+
+
+@app.middleware("http")
+async def protect_profile_responses(request: Request, call_next):
+    response = await call_next(request)
+    if _is_profile_derive_path(request.url.path):
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    if _is_profile_derive_path(request.url.path):
+        return JSONResponse(status_code=422, content={"detail": "Invalid request."})
+    return await request_validation_exception_handler(request, exc)
 
 
 class BirthData(BaseModel):
