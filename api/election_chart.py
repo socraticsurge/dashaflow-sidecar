@@ -148,27 +148,31 @@ router = APIRouter()
 )
 def derive_election_charts(data: ElectionChartDeriveRequest) -> dict[str, Any]:
     try:
-        local_timezone = pytz.timezone(data.location.timezone)
         snapshots = []
         ephemerides = []
 
         for requested_instant in data.instants:
-            local_instant = _parse_instant(requested_instant).astimezone(local_timezone)
-            local_date = local_instant.date().isoformat()
-            local_time = local_instant.strftime("%H:%M")
+            # The public contract receives an exact instant, not a local wall
+            # time. Passing UTC to DashaFlow preserves that instant even when
+            # the requested IANA zone is in a skipped or repeated DST hour.
+            # Latitude and longitude still determine the local horizon/Ascendant;
+            # the requested timezone remains response metadata for the caller.
+            calculation_instant = _parse_instant(requested_instant)
+            calculation_date = calculation_instant.date().isoformat()
+            calculation_time = calculation_instant.strftime("%H:%M")
             chart = dashaflow.calculate_vedic_chart(
-                local_date,
-                local_time,
+                calculation_date,
+                calculation_time,
                 data.location.latitude,
                 data.location.longitude,
-                data.location.timezone,
+                "UTC",
             )
             snapshots.append(_project_whole_sign_snapshot(chart, requested_instant))
             ephemerides.append(
                 _ephemeris_used_for_local_time(
-                    local_date,
-                    local_time,
-                    data.location.timezone,
+                    calculation_date,
+                    calculation_time,
+                    "UTC",
                 )
             )
 

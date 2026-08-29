@@ -129,10 +129,19 @@ instant must fall between 366 days before and 1,830 days after the server's
 current UTC time, inclusive. The location follows the same numeric coordinate
 and IANA-timezone validation as profile derivation. Extra fields are rejected.
 
-Each instant is converted to local civil time in `location.timezone` for the
-calculation. The response preserves the exact request strings and order, so a
-caller can join each chart to its candidate without relying on array sorting or
-timestamp reformatting:
+Each timestamp is first normalized to its exact UTC instant for the engine
+calculation. Latitude and longitude still determine the local horizon and
+Ascendant; `location.timezone` is validated and preserved as response metadata.
+This UTC invocation is contract-preserving for ordinary civil times and avoids
+discarding the offset during a daylight-saving transition. For example, the two
+New York `01:30` wall times on a fall-back day remain distinct because callers
+send `01:30-04:00` and `01:30-05:00` (equivalently, `05:30Z` and `06:30Z`). A
+skipped spring-forward wall time is likewise not an input ambiguity: an
+offset-aware instant always maps to one real local representation.
+
+The response preserves the exact request strings and order, so a caller can
+join each chart to its candidate without relying on array sorting or timestamp
+reformatting:
 
 ```json
 {
@@ -182,6 +191,25 @@ return a sanitized `422`; unavailable calculations return a sanitized `502`.
 Every response on the path, including errors, carries
 `Cache-Control: private, no-store`, and raw engine exceptions are neither logged
 nor returned.
+
+### Repository capture and validation boundary
+
+`tests/fixtures/election_chart_repository_capture.json` records deterministic
+DashaFlow `1.1.0` projections immediately before and after minute-level Lagna
+changes in Hyderabad (`Asia/Kolkata`) and New York
+(`America/New_York`). The tests replay each request twice, protect canonical
+graha fields and whole-sign house changes, exercise both representations of a
+New York DST fold, and verify that the UTC invocation matches DashaFlow's local
+invocation for ordinary unambiguous instants.
+
+This fixture is a **repository engine capture**, not independent astronomical
+or traditional-source validation. It can detect conversion, ordering,
+projection, and dependency drift within the pinned model. It cannot establish
+that the underlying ephemeris, ayanamsha choice, house convention, or Muhurtam
+interpretation is externally correct. DashaFlow returns degrees rounded to two
+decimal places, so the capture uses an absolute tolerance of `0.01°`; Rashi,
+graha order, retrograde flags, houses, boundary direction, and request ordering
+remain exact assertions.
 
 ## Local
 

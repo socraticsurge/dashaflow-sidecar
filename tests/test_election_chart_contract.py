@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import Mock, call
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +16,9 @@ ELECTION_PATH = "/v1/election-chart/derive"
 TOKEN = "test-sidecar-token"
 AUTHORIZATION = {"Authorization": f"Bearer {TOKEN}"}
 FIXED_NOW = datetime(2026, 8, 29, 0, 0, tzinfo=timezone.utc)
+REPOSITORY_CAPTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "election_chart_repository_capture.json"
+)
 VALID_REQUEST = {
     "contract_version": "1.0",
     "location": {
@@ -95,6 +101,38 @@ def mock_success(
         Mock(side_effect=ephemerides),
     )
     return calculate
+
+
+@pytest.fixture(scope="module")
+def repository_capture() -> dict:
+    return json.loads(REPOSITORY_CAPTURE_PATH.read_text(encoding="utf-8"))
+
+
+def assert_chart_matches_repository_capture(
+    actual: dict,
+    expected: dict,
+    *,
+    degree_tolerance: float,
+) -> None:
+    assert actual["instant"] == expected["instant"]
+    assert actual["lagna"]["rashi"] == expected["lagna"]["rashi"]
+    assert actual["lagna"]["degree"] == pytest.approx(
+        expected["lagna"]["degree"],
+        abs=degree_tolerance,
+    )
+
+    planets = actual["planets"]
+    expected_planets = expected["planets"]
+    assert [planet["name"] for planet in planets] == expected_planets["names"]
+    assert [planet["rashi"] for planet in planets] == expected_planets["rashis"]
+    assert [planet["house"] for planet in planets] == expected_planets["houses"]
+    assert [planet["retrograde"] for planet in planets] == expected_planets[
+        "retrograde"
+    ]
+    assert [planet["degree"] for planet in planets] == pytest.approx(
+        expected_planets["degrees"],
+        abs=degree_tolerance,
+    )
 
 
 def test_success_returns_ordered_minimal_whole_sign_snapshots(
@@ -269,8 +307,8 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
         },
     }
     assert calculate.call_args_list == [
-        call("2026-09-08", "10:59", 17.385, 78.4867, "Asia/Kolkata"),
-        call("2026-09-08", "11:49", 17.385, 78.4867, "Asia/Kolkata"),
+        call("2026-09-08", "05:29", 17.385, 78.4867, "UTC"),
+        call("2026-09-08", "06:19", 17.385, 78.4867, "UTC"),
     ]
     assert "raw-event" not in response.text
     assert "unpublished_detail" not in response.text
@@ -290,6 +328,145 @@ def test_single_ephemeris_is_reported_without_mixed_marker(
     assert response.status_code == 200
     assert response.json()["engine"]["ephemeris"] == "moshier"
     assert len(response.json()["data"]["charts"]) == 1
+
+
+def test_repository_engine_capture_is_explicitly_not_external_validation(
+    repository_capture: dict,
+) -> None:
+    metadata = repository_capture["metadata"]
+
+    assert metadata["kind"] == "repository_engine_capture"
+    assert "not independent" in metadata["validation_boundary"]
+    assert metadata["degree_tolerance"] == 0.01
+    assert len(metadata["limitations"]) >= 3
+
+
+def test_repository_engine_capture_is_repeatable_across_locations_and_boundaries(
+    client: TestClient,
+    repository_capture: dict,
+) -> None:
+    tolerance = repository_capture["metadata"]["degree_tolerance"]
+
+    for case in repository_capture["boundary_cases"]:
+        first = client.post(
+            ELECTION_PATH,
+            json=case["request"],
+            headers=AUTHORIZATION,
+        )
+        repeated = client.post(
+            ELECTION_PATH,
+            json=case["request"],
+            headers=AUTHORIZATION,
+        )
+
+        assert first.status_code == 200, case["id"]
+        assert repeated.status_code == 200, case["id"]
+        assert repeated.json() == first.json(), case["id"]
+        actual = first.json()
+        assert actual["location"] == case["request"]["location"]
+        assert actual["house_system"] == "whole_sign"
+        assert actual["engine"] == {
+            "name": "DashaFlow",
+            "version": "1.1.0",
+            "ayanamsha": "Lahiri",
+            "ephemeris": case["expected"]["ephemeris"],
+        }
+        assert len(actual["data"]["charts"]) == len(case["expected"]["charts"])
+        for actual_chart, expected_chart in zip(
+            actual["data"]["charts"],
+            case["expected"]["charts"],
+            strict=True,
+        ):
+            assert_chart_matches_repository_capture(
+                actual_chart,
+                expected_chart,
+                degree_tolerance=tolerance,
+            )
+
+
+def test_exact_utc_calculation_matches_unambiguous_local_engine_projection(
+    repository_capture: dict,
+) -> None:
+    for case in repository_capture["boundary_cases"]:
+        request = case["request"]
+        requested_instant = request["instants"][0]
+        instant = election_chart._parse_instant(requested_instant)
+        local_instant = instant.astimezone(ZoneInfo(request["location"]["timezone"]))
+        location = request["location"]
+
+        utc_chart = election_chart.dashaflow.calculate_vedic_chart(
+            instant.date().isoformat(),
+            instant.strftime("%H:%M"),
+            location["latitude"],
+            location["longitude"],
+            "UTC",
+        )
+        local_chart = election_chart.dashaflow.calculate_vedic_chart(
+            local_instant.date().isoformat(),
+            local_instant.strftime("%H:%M"),
+            location["latitude"],
+            location["longitude"],
+            location["timezone"],
+        )
+
+        assert election_chart._project_whole_sign_snapshot(
+            utc_chart,
+            requested_instant,
+        ) == election_chart._project_whole_sign_snapshot(
+            local_chart,
+            requested_instant,
+        )
+        assert election_chart._ephemeris_used_for_local_time(
+            instant.date().isoformat(),
+            instant.strftime("%H:%M"),
+            "UTC",
+        ) == election_chart._ephemeris_used_for_local_time(
+            local_instant.date().isoformat(),
+            local_instant.strftime("%H:%M"),
+            location["timezone"],
+        )
+
+
+def test_exact_instants_disambiguate_both_sides_of_a_dst_fold(
+    client: TestClient,
+    repository_capture: dict,
+) -> None:
+    case = repository_capture["dst_fold_case"]
+    instants = [
+        election_chart._parse_instant(value).astimezone(ZoneInfo("America/New_York"))
+        for value in case["request"]["instants"]
+    ]
+    assert [instant.strftime("%Y-%m-%d %H:%M") for instant in instants] == [
+        "2026-11-01 01:30",
+        "2026-11-01 01:30",
+    ]
+    assert [instant.utcoffset().total_seconds() for instant in instants] == [
+        -4 * 60 * 60,
+        -5 * 60 * 60,
+    ]
+
+    response = client.post(
+        ELECTION_PATH,
+        json=case["request"],
+        headers=AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    actual = response.json()
+    assert actual["location"] == case["request"]["location"]
+    assert [chart["instant"] for chart in actual["data"]["charts"]] == case["request"][
+        "instants"
+    ]
+    assert [chart["lagna"]["rashi"] for chart in actual["data"]["charts"]] == [
+        expected["rashi"] for expected in case["expected_lagnas"]
+    ]
+    assert [chart["lagna"]["degree"] for chart in actual["data"]["charts"]] == (
+        pytest.approx(
+            [expected["degree"] for expected in case["expected_lagnas"]],
+            abs=repository_capture["metadata"]["degree_tolerance"],
+        )
+    )
+    assert actual["data"]["charts"][0] != actual["data"]["charts"][1]
 
 
 @pytest.mark.parametrize(
