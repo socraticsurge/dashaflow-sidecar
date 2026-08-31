@@ -111,6 +111,12 @@ _PLANETS = (
 )
 
 
+def _utc_now() -> datetime:
+    """Return an aware UTC clock value; kept injectable for boundary tests."""
+
+    return datetime.now(timezone.utc)
+
+
 class ProfileDeriveRequest(BaseModel):
     """Strict wire input; values are never copied into the response."""
 
@@ -131,8 +137,6 @@ class ProfileDeriveRequest(BaseModel):
             parsed = date.fromisoformat(value)
         except ValueError as exc:
             raise ValueError("date must be a real calendar date") from exc
-        if parsed > date.today():
-            raise ValueError("date must not be in the future")
         return value
 
     @field_validator("time_of_birth")
@@ -157,12 +161,18 @@ class ProfileDeriveRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_local_birth_time(self) -> "ProfileDeriveRequest":
+        birthplace_timezone = pytz.timezone(self.timezone)
+        if date.fromisoformat(self.date_of_birth) > _utc_now().astimezone(
+            birthplace_timezone
+        ).date():
+            raise ValueError("date must not be in the future")
+
         naive = datetime.combine(
             date.fromisoformat(self.date_of_birth),
             time.fromisoformat(self.time_of_birth),
         )
         try:
-            pytz.timezone(self.timezone).localize(naive, is_dst=None)
+            birthplace_timezone.localize(naive, is_dst=None)
         except (pytz.AmbiguousTimeError, pytz.NonExistentTimeError) as exc:
             raise ValueError(
                 "local birth time must identify one real instant"

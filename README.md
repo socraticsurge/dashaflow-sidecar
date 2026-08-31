@@ -33,7 +33,8 @@ via the `DASHAFLOW_SIDECAR_URL` environment variable.
 ```
 
 Dates and times must be real values in the exact ISO `YYYY-MM-DD` and `HH:MM`
-forms, and a birth date cannot be in the future. The complete local civil time
+forms, and a birth date cannot be in the future in the supplied birthplace
+timezone. The complete local civil time
 must resolve to one real instant: repeated and skipped DST wall times are
 rejected rather than guessed. Coordinates must be JSON numbers within
 `[-90, 90]` latitude and `[-180, 180]` longitude, and `timezone` must be an IANA
@@ -104,6 +105,12 @@ code or a `VITE_*` variable. Roll out in this order:
    `DASHAFLOW_SIDECAR_TOKEN`) together with `DASHAFLOW_SIDECAR_URL`.
 4. Deploy the caller and verify the public gateway; rotate both token settings
    together when rotation is needed.
+
+The caller and sidecar intentionally share the same private-contract bounds:
+token length `32..256`, visible non-space ASCII only; contract version `1.0`;
+engine `DashaFlow`; ayanamsha `Lahiri`; canonical Panchangam Nakshatra/Rashi
+spellings; and the exact ordered, unique nine-graha sequence documented above.
+Either service must fail closed if these invariants drift.
 
 ## Election-chart contract (`1.0`)
 

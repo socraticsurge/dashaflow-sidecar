@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -339,6 +340,63 @@ def test_ambiguous_and_nonexistent_local_times_fail_closed(
     assert response.headers["Cache-Control"] == "private, no-store"
     assert not any(str(value) in response.text for value in replacement.values())
     calculate.assert_not_called()
+
+
+def test_future_date_uses_the_supplied_birthplace_timezone(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A UTC-calendar date can still be tomorrow at the birthplace."""
+
+    calculate = mock_success(monkeypatch)
+    monkeypatch.setattr(
+        profile,
+        "_utc_now",
+        lambda: datetime(2026, 9, 1, 0, 30, tzinfo=timezone.utc),
+    )
+    request = {
+        **VALID_REQUEST,
+        "date_of_birth": "2026-09-01",
+        "timezone": "America/Los_Angeles",
+    }
+
+    response = client.post(PROFILE_PATH, json=request, headers=AUTHORIZATION)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid request."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_not_called()
+
+
+def test_current_birthplace_date_is_allowed_across_the_utc_date_line(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The birthplace can already be on the next date while UTC is not."""
+
+    calculate = mock_success(monkeypatch)
+    monkeypatch.setattr(
+        profile,
+        "_utc_now",
+        lambda: datetime(2026, 8, 31, 10, 30, tzinfo=timezone.utc),
+    )
+    request = {
+        **VALID_REQUEST,
+        "date_of_birth": "2026-09-01",
+        "timezone": "Pacific/Kiritimati",
+    }
+
+    response = client.post(PROFILE_PATH, json=request, headers=AUTHORIZATION)
+
+    assert response.status_code == 200
+    assert response.json()["contract_version"] == "1.0"
+    calculate.assert_called_once_with(
+        "2026-09-01",
+        "14:30",
+        17.385,
+        78.4867,
+        "Pacific/Kiritimati",
+    )
 
 
 def test_engine_exception_is_not_returned_or_logged_by_the_endpoint(
