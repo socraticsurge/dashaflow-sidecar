@@ -85,11 +85,14 @@ text is returned.
 ### Authentication and rollout
 
 Set a high-entropy `DASHAFLOW_API_TOKEN` in the sidecar environment and send it
-as `Authorization: Bearer <token>`. This authentication applies to the private
+as `Authorization: Bearer <token>`. Generate at least 32 and at most 256 visible
+ASCII characters; a 32-byte or longer random value encoded as hexadecimal or
+base64url is suitable. This authentication applies to the private
 `/v1/profile/derive` and `/v1/election-chart/derive` contracts; all legacy routes
 remain compatible. Missing, malformed, or incorrect credentials return `401`.
-If `DASHAFLOW_API_TOKEN` itself is absent or malformed, either contract fails
-closed with `503`.
+If `DASHAFLOW_API_TOKEN` itself is absent, shorter than 32 characters, longer
+than 256 characters, non-ASCII, or contains whitespace/control characters,
+either contract fails closed with `503`.
 
 The token is a server-to-server secret and must never be embedded in browser
 code or a `VITE_*` variable. Roll out in this order:
@@ -220,6 +223,8 @@ graha order, retrograde flags, houses, boundary direction, and request ordering
 remain exact assertions.
 
 ## Local
+
+Python 3.12 is the pinned Vercel and CI runtime (`.python-version`).
 
 ```bash
 pip install -r requirements.txt

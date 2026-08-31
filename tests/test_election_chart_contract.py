@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from api import election_chart, index
 
 ELECTION_PATH = "/v1/election-chart/derive"
-TOKEN = "test-sidecar-token"
+TOKEN = "test-sidecar-token-0123456789abcdef"
 AUTHORIZATION = {"Authorization": f"Bearer {TOKEN}"}
 FIXED_NOW = datetime(2026, 8, 29, 0, 0, tzinfo=timezone.utc)
 REPOSITORY_CAPTURE_PATH = (
@@ -555,11 +555,12 @@ def test_exact_instants_disambiguate_both_sides_of_a_dst_fold(
     "authorization",
     [
         None,
-        "Basic test-sidecar-token",
+        f"Basic {TOKEN}",
         "Bearer",
         "Bearer wrong-token",
-        "Bearer  test-sidecar-token",
-        "Bearer test-sidecar-token trailing",
+        f"Bearer  {TOKEN}",
+        f"Bearer {TOKEN} trailing",
+        f"Bearer {TOKEN}{'x' * 256}",
     ],
 )
 def test_endpoint_rejects_missing_or_invalid_bearer_auth(
@@ -579,7 +580,18 @@ def test_endpoint_rejects_missing_or_invalid_bearer_auth(
     calculate.assert_not_called()
 
 
-@pytest.mark.parametrize("configured", [None, "", " token-with-spaces ", "töken"])
+@pytest.mark.parametrize(
+    "configured",
+    [
+        None,
+        "",
+        "x" * 31,
+        "x" * 257,
+        " token-with-spaces ",
+        "töken" * 8,
+        ("x" * 31) + "\x7f",
+    ],
+)
 def test_missing_or_misconfigured_server_token_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     configured: str | None,

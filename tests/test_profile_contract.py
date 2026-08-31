@@ -6,12 +6,10 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from api import index
-from api import profile
-
+from api import index, profile
 
 PROFILE_PATH = "/v1/profile/derive"
-TOKEN = "test-sidecar-token"
+TOKEN = "test-sidecar-token-0123456789abcdef"
 AUTHORIZATION = {"Authorization": f"Bearer {TOKEN}"}
 VALID_REQUEST = {
     "date_of_birth": "1990-04-15",
@@ -160,11 +158,12 @@ def test_success_projects_only_the_versioned_canonical_contract(
     "authorization",
     [
         None,
-        "Basic test-sidecar-token",
+        f"Basic {TOKEN}",
         "Bearer",
         "Bearer wrong-token",
-        "Bearer  test-sidecar-token",
-        "Bearer test-sidecar-token trailing",
+        f"Bearer  {TOKEN}",
+        f"Bearer {TOKEN} trailing",
+        f"Bearer {TOKEN}{'x' * 256}",
     ],
 )
 def test_endpoint_rejects_missing_or_invalid_bearer_auth(
@@ -184,7 +183,18 @@ def test_endpoint_rejects_missing_or_invalid_bearer_auth(
     calculate.assert_not_called()
 
 
-@pytest.mark.parametrize("configured", [None, "", " token-with-spaces ", "töken"])
+@pytest.mark.parametrize(
+    "configured",
+    [
+        None,
+        "",
+        "x" * 31,
+        "x" * 257,
+        " token-with-spaces ",
+        "töken" * 8,
+        ("x" * 31) + "\x7f",
+    ],
+)
 def test_missing_or_misconfigured_server_token_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     configured: str | None,
