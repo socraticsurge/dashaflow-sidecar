@@ -37,14 +37,14 @@ VALID_REQUEST = {
 
 _SOURCE_PLANETS = (
     ("Sun", "Aries", 1.25, False),
-    ("Moon", "Taurus", 2.5, False),
+    ("Moon", "Aquarius", 2.5, False),
     ("Mars", "Gemini", 3.75, True),
     ("Mercury", "Cancer", 4.0, False),
     ("Jupiter", "Leo", 5.25, False),
     ("Venus", "Virgo", 6.5, True),
     ("Saturn", "Libra", 7.75, False),
     ("Rahu", "Scorpio", 8.0, True),
-    ("Ketu", "Sagittarius", 9.25, True),
+    ("Ketu", "Taurus", 8.0, True),
 )
 
 
@@ -259,9 +259,9 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
                         },
                         {
                             "name": "Chandra",
-                            "rashi": "Vrishabha",
+                            "rashi": "Kumbha",
                             "degree": 2.5,
-                            "house": 7,
+                            "house": 4,
                             "retrograde": False,
                         },
                         {
@@ -308,9 +308,9 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
                         },
                         {
                             "name": "Ketu",
-                            "rashi": "Dhanu",
-                            "degree": 9.25,
-                            "house": 2,
+                            "rashi": "Vrishabha",
+                            "degree": 8.0,
+                            "house": 7,
                             "retrograde": True,
                         },
                     ],
@@ -328,9 +328,9 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
                         },
                         {
                             "name": "Chandra",
-                            "rashi": "Vrishabha",
+                            "rashi": "Kumbha",
                             "degree": 2.5,
-                            "house": 7,
+                            "house": 4,
                             "retrograde": False,
                         },
                         {
@@ -377,9 +377,9 @@ def test_success_returns_ordered_minimal_whole_sign_snapshots(
                         },
                         {
                             "name": "Ketu",
-                            "rashi": "Dhanu",
-                            "degree": 9.25,
-                            "house": 2,
+                            "rashi": "Vrishabha",
+                            "degree": 8.0,
+                            "house": 7,
                             "retrograde": True,
                         },
                     ],
@@ -797,6 +797,67 @@ def test_malformed_engine_projection_fails_safely(
     calculate.assert_called_once()
 
 
+def test_election_projection_rejects_non_opposite_nodes(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chart = chart_fixture()
+    chart["planets"]["Ketu"]["degree"] = 8.02
+    calculate = Mock(return_value=chart)
+    monkeypatch.setattr(
+        election_chart.dashaflow,
+        "calculate_vedic_chart",
+        calculate,
+    )
+    monkeypatch.setattr(
+        election_chart,
+        "_ephemeris_used_for_local_time",
+        Mock(return_value="moshier"),
+    )
+    request = deepcopy(VALID_REQUEST)
+    request["instants"] = request["instants"][:1]
+
+    response = client.post(ELECTION_PATH, json=request, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Election chart derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
+@pytest.mark.parametrize("target", ["lagna", "planet"])
+def test_election_projection_rejects_non_hundredth_degree(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    chart = chart_fixture()
+    if target == "lagna":
+        chart["lagna"]["degree"] = 12.345
+    else:
+        chart["planets"]["Sun"]["degree"] = 1.234
+    calculate = Mock(return_value=chart)
+    monkeypatch.setattr(
+        election_chart.dashaflow,
+        "calculate_vedic_chart",
+        calculate,
+    )
+    monkeypatch.setattr(
+        election_chart,
+        "_ephemeris_used_for_local_time",
+        Mock(return_value="moshier"),
+    )
+    request = deepcopy(VALID_REQUEST)
+    request["instants"] = request["instants"][:1]
+
+    response = client.post(ELECTION_PATH, json=request, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Election chart derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
 def test_rounded_thirty_degree_boundary_preserves_engine_sign(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -827,5 +888,5 @@ def test_rounded_thirty_degree_boundary_preserves_engine_sign(
         planet for planet in snapshot['planets']
         if planet['name'] == 'Chandra'
     )
-    assert moon['rashi'] == 'Vrishabha'
+    assert moon['rashi'] == 'Kumbha'
     assert 29.99 < moon['degree'] < 30

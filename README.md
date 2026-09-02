@@ -56,7 +56,7 @@ array; the actual response contains all nine:
   "data": {
     "nakshatra": "Dhanishtha",
     "pada": 3,
-    "janma_rashi": "Vrishabha",
+    "janma_rashi": "Kumbha",
     "lagna": "Vrischika",
     "lagna_degree": 12.5,
     "planets": [
@@ -64,7 +64,7 @@ array; the actual response contains all nine:
         "name": "Surya",
         "rashi": "Mesha",
         "degree": 1.25,
-        "house": 1,
+        "house": 6,
         "retrograde": false
       }
     ]
@@ -76,7 +76,11 @@ array; the actual response contains all nine:
 `Kuja`, `Budha`, `Guru`, `Shukra`, `Shani`, `Rahu`, `Ketu`. Nakshatras and
 Rashis use the canonical Panchangam Sanskrit spellings. The `ephemeris` value is
 derived from the Swiss Ephemeris return flags and is one of `swiss`, `moshier`,
-or `unknown`; it is not inferred from the package description.
+or `unknown`; it is not inferred from the package description. The sidecar
+fails closed if the Moon's rounded longitude disagrees with its Nakshatra,
+Pada, or Janma Rashi, if a profile house disagrees with the Lagna-based Whole
+Sign house, if Rahu and Ketu are not opposite within the two-decimal rounding
+tolerance, or if a returned degree is not aligned to a hundredth of a degree.
 
 Every response on this path, including errors, carries
 `Cache-Control: private, no-store`. Invalid bodies return a sanitized `422`, an
@@ -200,7 +204,9 @@ different Rahu/Ketu conventions into one scoring run. DashaFlow rounds
 within-sign degrees to two decimals, so the sidecar normalizes the engine's
 legitimate boundary representation of `30.0` to the largest value below 30
 while preserving the sign the engine selected. Values greater than 30 remain
-malformed.
+malformed. Values not aligned to a hundredth of a degree and chart snapshots
+whose Rahu/Ketu axis is not opposite within the rounding tolerance also fail
+closed.
 
 This is an astronomical projection contract, not a Muhurtam scoring endpoint.
 It accepts no activity, profile, name, natal-chart, or birth data. Invalid bodies

@@ -110,6 +110,12 @@ _PLANETS = (
     ("Ketu", "Ketu"),
 )
 
+_ROUNDED_DEGREE_HALF_STEP = 0.005
+_ROUNDED_OPPOSITION_TOLERANCE = _ROUNDED_DEGREE_HALF_STEP * 2
+_ANGLE_EPSILON = 1e-9
+_HUNDREDTH_ALIGNMENT_EPSILON = 1e-9
+_PADA_WIDTH = 360 / (len(_NAKSHATRAS) * 4)
+
 
 def _utc_now() -> datetime:
     """Return an aware UTC clock value; kept injectable for boundary tests."""
@@ -214,6 +220,11 @@ def _finite_degree(value: Any) -> float:
     result = float(value)
     if not math.isfinite(result) or not 0 <= result <= 30:
         raise _ProjectionError
+    if (
+        abs(result * 100 - round(result * 100))
+        > _HUNDREDTH_ALIGNMENT_EPSILON
+    ):
+        raise _ProjectionError
     # DashaFlow 1.1.0 rounds a within-sign value to two decimals after it has
     # already selected the sign. Values from 29.995 degrees can therefore be
     # represented as exactly 30.0 with the still-correct preceding sign. Keep
@@ -234,6 +245,83 @@ def _pada(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 4:
         raise _ProjectionError
     return value
+
+
+def _absolute_longitude(rashi: str, degree: float) -> float:
+    return _RASHI_NAMES.index(rashi) * 30 + degree
+
+
+def _require_opposite_nodes(planets: list[dict[str, Any]]) -> None:
+    rahu = planets[7]
+    ketu = planets[8]
+    if rahu["name"] != "Rahu" or ketu["name"] != "Ketu":
+        raise _ProjectionError
+
+    separation = (
+        _absolute_longitude(ketu["rashi"], ketu["degree"])
+        - _absolute_longitude(rahu["rashi"], rahu["degree"])
+    ) % 360
+    if (
+        abs(separation - 180)
+        > _ROUNDED_OPPOSITION_TOLERANCE + _ANGLE_EPSILON
+    ):
+        raise _ProjectionError
+
+
+def _require_whole_sign_houses(
+    lagna_rashi: str,
+    planets: list[dict[str, Any]],
+) -> None:
+    lagna_index = _RASHI_NAMES.index(lagna_rashi)
+    for planet in planets:
+        expected_house = (
+            _RASHI_NAMES.index(planet["rashi"]) - lagna_index
+        ) % 12 + 1
+        if planet["house"] != expected_house:
+            raise _ProjectionError
+
+
+def _project_moon_birth_facts(
+    moon_source: Mapping[str, Any],
+    moon: Mapping[str, Any],
+) -> dict[str, Any]:
+    nakshatra = _canonical_name(
+        moon_source.get("nakshatra"),
+        _NAKSHATRA_ALIASES,
+    )
+    pada = _pada(moon_source.get("pada"))
+    janma_rashi = _canonical_name(moon_source.get("sign"), _RASHI_ALIASES)
+    if moon.get("name") != "Chandra" or moon.get("rashi") != janma_rashi:
+        raise _ProjectionError
+
+    nakshatra_index = _NAKSHATRAS.index(nakshatra)
+    rashi_index = _RASHI_NAMES.index(janma_rashi)
+    pada_index = nakshatra_index * 4 + pada - 1
+    if pada_index // 9 != rashi_index:
+        raise _ProjectionError
+
+    pada_start = pada_index * _PADA_WIDTH
+    pada_end = (pada_index + 1) * _PADA_WIDTH
+    rashi_start = rashi_index * 30
+    possible_start = rashi_start + max(
+        0,
+        moon["degree"] - _ROUNDED_DEGREE_HALF_STEP,
+    )
+    possible_end = rashi_start + min(
+        30,
+        moon["degree"] + _ROUNDED_DEGREE_HALF_STEP,
+    )
+    if (
+        possible_start > pada_end + _ANGLE_EPSILON
+        or possible_end < pada_start - _ANGLE_EPSILON
+    ):
+        raise _ProjectionError
+
+    return {
+        "nakshatra": nakshatra,
+        "pada": pada,
+        "janma_rashi": janma_rashi,
+    }
 
 
 def _engine_version() -> str:
@@ -323,12 +411,15 @@ def _project_chart_snapshot(chart: Any) -> dict[str, Any]:
             }
         )
 
+    projected_lagna = {
+        "rashi": _canonical_name(lagna.get("sign"), _RASHI_ALIASES),
+        "degree": _finite_degree(lagna.get("degree")),
+    }
+    _require_opposite_nodes(projected_planets)
+
     return {
         "ayanamsha": ayanamsha,
-        "lagna": {
-            "rashi": _canonical_name(lagna.get("sign"), _RASHI_ALIASES),
-            "degree": _finite_degree(lagna.get("degree")),
-        },
+        "lagna": projected_lagna,
         "planets": projected_planets,
     }
 
@@ -338,6 +429,11 @@ def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
     planets = _record(source.get("planets"))
     moon = _record(planets.get("Moon"))
     snapshot = _project_chart_snapshot(chart)
+    _require_whole_sign_houses(
+        snapshot["lagna"]["rashi"],
+        snapshot["planets"],
+    )
+    moon_facts = _project_moon_birth_facts(moon, snapshot["planets"][1])
 
     return {
         "contract_version": CONTRACT_VERSION,
@@ -348,12 +444,7 @@ def _project_chart(chart: Any, ephemeris: str) -> dict[str, Any]:
             "ephemeris": ephemeris,
         },
         "data": {
-            "nakshatra": _canonical_name(
-                moon.get("nakshatra"),
-                _NAKSHATRA_ALIASES,
-            ),
-            "pada": _pada(moon.get("pada")),
-            "janma_rashi": _canonical_name(moon.get("sign"), _RASHI_ALIASES),
+            **moon_facts,
             "lagna": snapshot["lagna"]["rashi"],
             "lagna_degree": snapshot["lagna"]["degree"],
             "planets": snapshot["planets"],

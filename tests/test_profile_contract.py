@@ -21,16 +21,21 @@ VALID_REQUEST = {
 }
 
 _SOURCE_PLANETS = (
-    ("Sun", "Aries", 1.25, 1, False),
-    ("Moon", "Taurus", 2.5, 2, False),
-    ("Mars", "Gemini", 3.75, 3, True),
-    ("Mercury", "Cancer", 4.0, 4, False),
-    ("Jupiter", "Leo", 5.25, 5, False),
-    ("Venus", "Virgo", 6.5, 6, True),
-    ("Saturn", "Libra", 7.75, 7, False),
-    ("Rahu", "Scorpio", 8.0, 8, True),
-    ("Ketu", "Sagittarius", 9.25, 9, True),
+    ("Sun", "Aries", 1.25, 6, False),
+    ("Moon", "Aquarius", 2.5, 4, False),
+    ("Mars", "Gemini", 3.75, 8, True),
+    ("Mercury", "Cancer", 4.0, 9, False),
+    ("Jupiter", "Leo", 5.25, 10, False),
+    ("Venus", "Virgo", 6.5, 11, True),
+    ("Saturn", "Libra", 7.75, 12, False),
+    ("Rahu", "Scorpio", 8.0, 1, True),
+    ("Ketu", "Taurus", 8.0, 7, True),
 )
+
+_MOON_FACTS = {
+    "Ashwini": ("Aries", 1.25, 6, 1),
+    "Dhanishta": ("Aquarius", 2.5, 4, 3),
+}
 
 
 def chart_fixture(nakshatra: str = "Dhanishta") -> dict:
@@ -44,7 +49,16 @@ def chart_fixture(nakshatra: str = "Dhanishta") -> dict:
         }
         for name, sign, degree, house, retrograde in _SOURCE_PLANETS
     }
-    planets["Moon"].update({"nakshatra": nakshatra, "pada": 3})
+    moon_sign, moon_degree, moon_house, pada = _MOON_FACTS[nakshatra]
+    planets["Moon"].update(
+        {
+            "sign": moon_sign,
+            "degree": moon_degree,
+            "house": moon_house,
+            "nakshatra": nakshatra,
+            "pada": pada,
+        }
+    )
     return {
         "metadata": {
             "dob": "raw-birth-date-must-not-be-returned",
@@ -91,11 +105,47 @@ def mock_success(
 
 
 @pytest.mark.parametrize(
-    ("nakshatra", "return_flags", "expected_nakshatra", "expected_ephemeris"),
+    (
+        "nakshatra",
+        "return_flags",
+        "expected_nakshatra",
+        "expected_pada",
+        "expected_rashi",
+        "expected_degree",
+        "expected_house",
+        "expected_ephemeris",
+    ),
     [
-        ("Ashwini", profile.swe.FLG_SWIEPH, "Ashvini", "swiss"),
-        ("Dhanishta", profile.swe.FLG_MOSEPH, "Dhanishtha", "moshier"),
-        ("Dhanishta", profile.swe.FLG_JPLEPH, "Dhanishtha", "unknown"),
+        (
+            "Ashwini",
+            profile.swe.FLG_SWIEPH,
+            "Ashvini",
+            1,
+            "Mesha",
+            1.25,
+            6,
+            "swiss",
+        ),
+        (
+            "Dhanishta",
+            profile.swe.FLG_MOSEPH,
+            "Dhanishtha",
+            3,
+            "Kumbha",
+            2.5,
+            4,
+            "moshier",
+        ),
+        (
+            "Dhanishta",
+            profile.swe.FLG_JPLEPH,
+            "Dhanishtha",
+            3,
+            "Kumbha",
+            2.5,
+            4,
+            "unknown",
+        ),
     ],
 )
 def test_success_projects_only_the_versioned_canonical_contract(
@@ -104,6 +154,10 @@ def test_success_projects_only_the_versioned_canonical_contract(
     nakshatra: str,
     return_flags: int,
     expected_nakshatra: str,
+    expected_pada: int,
+    expected_rashi: str,
+    expected_degree: float,
+    expected_house: int,
     expected_ephemeris: str,
 ) -> None:
     calculate = mock_success(
@@ -126,20 +180,20 @@ def test_success_projects_only_the_versioned_canonical_contract(
         },
         "data": {
             "nakshatra": expected_nakshatra,
-            "pada": 3,
-            "janma_rashi": "Vrishabha",
+            "pada": expected_pada,
+            "janma_rashi": expected_rashi,
             "lagna": "Vrischika",
             "lagna_degree": 12.5,
             "planets": [
-                {"name": "Surya", "rashi": "Mesha", "degree": 1.25, "house": 1, "retrograde": False},
-                {"name": "Chandra", "rashi": "Vrishabha", "degree": 2.5, "house": 2, "retrograde": False},
-                {"name": "Kuja", "rashi": "Mithuna", "degree": 3.75, "house": 3, "retrograde": True},
-                {"name": "Budha", "rashi": "Karka", "degree": 4.0, "house": 4, "retrograde": False},
-                {"name": "Guru", "rashi": "Simha", "degree": 5.25, "house": 5, "retrograde": False},
-                {"name": "Shukra", "rashi": "Kanya", "degree": 6.5, "house": 6, "retrograde": True},
-                {"name": "Shani", "rashi": "Tula", "degree": 7.75, "house": 7, "retrograde": False},
-                {"name": "Rahu", "rashi": "Vrischika", "degree": 8.0, "house": 8, "retrograde": True},
-                {"name": "Ketu", "rashi": "Dhanu", "degree": 9.25, "house": 9, "retrograde": True},
+                {"name": "Surya", "rashi": "Mesha", "degree": 1.25, "house": 6, "retrograde": False},
+                {"name": "Chandra", "rashi": expected_rashi, "degree": expected_degree, "house": expected_house, "retrograde": False},
+                {"name": "Kuja", "rashi": "Mithuna", "degree": 3.75, "house": 8, "retrograde": True},
+                {"name": "Budha", "rashi": "Karka", "degree": 4.0, "house": 9, "retrograde": False},
+                {"name": "Guru", "rashi": "Simha", "degree": 5.25, "house": 10, "retrograde": False},
+                {"name": "Shukra", "rashi": "Kanya", "degree": 6.5, "house": 11, "retrograde": True},
+                {"name": "Shani", "rashi": "Tula", "degree": 7.75, "house": 12, "retrograde": False},
+                {"name": "Rahu", "rashi": "Vrischika", "degree": 8.0, "house": 1, "retrograde": True},
+                {"name": "Ketu", "rashi": "Vrishabha", "degree": 8.0, "house": 7, "retrograde": True},
             ],
         },
     }
@@ -441,6 +495,87 @@ def test_malformed_engine_projection_fails_safely(
     calculate.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "matching_house"),
+    [
+        ("nakshatra", "Shatabhisha", 4),
+        ("pada", 4, 4),
+        ("sign", "Capricorn", 3),
+    ],
+    ids=["nakshatra", "pada", "rashi"],
+)
+def test_profile_projection_rejects_incoherent_moon_birth_facts(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: str | int,
+    matching_house: int,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    chart = chart_fixture()
+    chart["planets"]["Moon"][field] = value
+    chart["planets"]["Moon"]["house"] = matching_house
+    calculate.return_value = chart
+
+    response = client.post(PROFILE_PATH, json=VALID_REQUEST, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Profile derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
+def test_profile_projection_rejects_non_whole_sign_house(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    chart = chart_fixture()
+    chart["planets"]["Mars"]["house"] = 9
+    calculate.return_value = chart
+
+    response = client.post(PROFILE_PATH, json=VALID_REQUEST, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Profile derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
+def test_profile_projection_rejects_non_opposite_nodes(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    chart = chart_fixture()
+    chart["planets"]["Ketu"]["degree"] = 8.02
+    calculate.return_value = chart
+
+    response = client.post(PROFILE_PATH, json=VALID_REQUEST, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Profile derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
+def test_profile_projection_rejects_non_hundredth_degree(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculate = mock_success(monkeypatch)
+    chart = chart_fixture()
+    chart["planets"]["Sun"]["degree"] = 1.234
+    calculate.return_value = chart
+
+    response = client.post(PROFILE_PATH, json=VALID_REQUEST, headers=AUTHORIZATION)
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Profile derivation failed."}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    calculate.assert_called_once()
+
+
 def test_profile_projection_accepts_engine_rounded_sign_boundary(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -448,6 +583,8 @@ def test_profile_projection_accepts_engine_rounded_sign_boundary(
     chart = chart_fixture()
     chart['lagna']['degree'] = 30.0
     chart['planets']['Moon']['degree'] = 30.0
+    chart['planets']['Moon']['nakshatra'] = 'Purva Bhadrapada'
+    chart['planets']['Moon']['pada'] = 3
     monkeypatch.setattr(
         profile.dashaflow,
         'calculate_vedic_chart',
@@ -469,7 +606,7 @@ def test_profile_projection_accepts_engine_rounded_sign_boundary(
         planet for planet in data['planets']
         if planet['name'] == 'Chandra'
     )
-    assert moon['rashi'] == 'Vrishabha'
+    assert moon['rashi'] == 'Kumbha'
     assert 29.99 < moon['degree'] < 30
 
 
