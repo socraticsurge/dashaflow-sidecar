@@ -1,9 +1,11 @@
 # DashaFlow Sidecar
 
-Python serverless function that wraps the [DashaFlow](https://pypi.org/project/dashaflow/) Vedic
-astrology library. Deployed standalone on Vercel (no framework) so the
-`/api/*` URL space is owned by the Python function rather than a
-framework router.
+FastAPI service that wraps the [DashaFlow](https://pypi.org/project/dashaflow/)
+Vedic astrology library and runs in Vercel's native FastAPI framework. The
+deployment entrypoint is pinned as `api.index:app` in `pyproject.toml`, so
+Vercel sends the original request path directly to the ASGI app. Do not add a
+catch-all rewrite to `/api/index`; that changes the path seen by FastAPI and
+turns valid root routes into application-level `404` responses.
 
 Used by [astro-unified-core](https://github.com/socraticsurge/astro-unified-core)
 via the `DASHAFLOW_SIDECAR_URL` environment variable.
