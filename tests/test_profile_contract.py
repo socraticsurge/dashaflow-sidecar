@@ -610,10 +610,10 @@ def test_profile_projection_accepts_engine_rounded_sign_boundary(
     assert 29.99 < moon['degree'] < 30
 
 
-def test_legacy_routes_remain_unauthenticated_and_compatible(
+def test_legacy_routes_require_authentication_and_remain_compatible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DASHAFLOW_API_TOKEN", raising=False)
+    monkeypatch.setenv("DASHAFLOW_API_TOKEN", TOKEN)
     calculate = Mock(return_value={"legacy": "chart"})
     transit = Mock(return_value={"legacy": "transit"})
     career = Mock(return_value={"legacy": "career"})
@@ -634,15 +634,21 @@ def test_legacy_routes_remain_unauthenticated_and_compatible(
     client = TestClient(index.app)
 
     health_response = client.get("/health")
-    calculate_response = client.post("/calculate", json=VALID_REQUEST)
+    calculate_response = client.post(
+        "/calculate", json=VALID_REQUEST, headers=AUTHORIZATION
+    )
     transit_response = client.post(
         "/transit",
         json={**VALID_REQUEST, "transit_date": "2026-08-29"},
+        headers=AUTHORIZATION,
     )
-    career_response = client.post("/career", json=VALID_REQUEST)
+    career_response = client.post(
+        "/career", json=VALID_REQUEST, headers=AUTHORIZATION
+    )
     compatibility_response = client.post(
         "/compatibility",
         json={"p1": VALID_REQUEST, "p2": VALID_REQUEST},
+        headers=AUTHORIZATION,
     )
     muhurtha_response = client.post(
         "/muhurtha",
@@ -653,6 +659,7 @@ def test_legacy_routes_remain_unauthenticated_and_compatible(
             "start_date": "2026-08-29",
             "end_date": "2026-08-29",
         },
+        headers=AUTHORIZATION,
     )
 
     assert health_response.status_code == 200
@@ -680,8 +687,8 @@ def test_legacy_routes_remain_unauthenticated_and_compatible(
             ]
         },
     }
+    assert "Cache-Control" not in health_response.headers
     for response in (
-        health_response,
         calculate_response,
         transit_response,
         career_response,
@@ -689,4 +696,4 @@ def test_legacy_routes_remain_unauthenticated_and_compatible(
         muhurtha_response,
     ):
         assert response.status_code == 200
-        assert "Cache-Control" not in response.headers
+        assert response.headers["Cache-Control"] == "private, no-store"
