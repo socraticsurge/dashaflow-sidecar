@@ -16,6 +16,18 @@ def test_fastapi_entrypoint_is_explicit() -> None:
     assert config["tool"]["vercel"]["entrypoint"] == "api.index:app"
 
 
+def test_pyproject_is_a_complete_runtime_dependency_source() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    requirements = {
+        line
+        for raw_line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+        if (line := raw_line.strip()) and not line.startswith("#")
+    }
+
+    assert config["project"]["name"] == "dashaflow-sidecar"
+    assert set(config["project"]["dependencies"]) == requirements
+
+
 def test_vercel_config_does_not_rewrite_root_into_the_asgi_app() -> None:
     path = ROOT / "vercel.json"
     if not path.exists():
