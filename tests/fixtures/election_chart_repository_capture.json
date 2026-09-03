@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "kind": "repository_engine_capture",
+    "captured_with": {
+      "dashaflow": "1.1.0",
+      "ayanamsha": "Lahiri",
+      "house_system": "whole_sign",
+      "node_convention": "mean"
+    },
+    "degree_tolerance": 0.01,
+    "validation_boundary": "This is a reproducibility capture of the pinned repository engine, not independent astronomical or traditional-source validation.",
+    "limitations": [
+      "DashaFlow projects degrees to two decimal places, so degree assertions use an absolute tolerance of 0.01 degree.",
+      "The capture protects exact-instant conversion, canonical projection, and whole-sign house changes around minute-level Lagna boundaries.",
+      "It does not establish that the underlying astronomical model or Muhurtam interpretation is externally correct."
+    ]
+  },
+  "boundary_cases": [
+    {
+      "id": "hyderabad-tula-vrischika-boundary",
+      "request": {
+        "contract_version": "1.0",
+        "location": {
+          "latitude": 17.385,
+          "longitude": 78.4867,
+          "timezone": "Asia/Kolkata"
+        },
+        "instants": [
+          "2026-09-08T05:28:00Z",
+          "2026-09-08T05:29:00Z"
+        ]
+      },
+      "expected": {
+        "ephemeris": "moshier",
+        "charts": [
+          {
+            "instant": "2026-09-08T05:28:00Z",
+            "lagna": {"rashi": "Tula", "degree": 29.82},
+            "planets": {
+              "names": ["Surya", "Chandra", "Kuja", "Budha", "Guru", "Shukra", "Shani", "Rahu", "Ketu"],
+              "rashis": ["Simha", "Karka", "Mithuna", "Kanya", "Karka", "Tula", "Meena", "Kumbha", "Simha"],
+              "degrees": [21.37, 13.29, 23.71, 1.56, 20.97, 4.34, 19.01, 4.69, 4.69],
+              "houses": [11, 10, 9, 12, 10, 1, 6, 5, 11],
+              "retrograde": [false, false, false, false, false, false, true, true, true]
+            }
+          },
+          {
+            "instant": "2026-09-08T05:29:00Z",
+            "lagna": {"rashi": "Vrischika", "degree": 0.04},
+            "planets": {
+              "names": ["Surya", "Chandra", "Kuja", "Budha", "Guru", "Shukra", "Shani", "Rahu", "Ketu"],
+              "rashis": ["Simha", "Karka", "Mithuna", "Kanya", "Karka", "Tula", "Meena", "Kumbha", "Simha"],
+              "degrees": [21.37, 13.3, 23.71, 1.56, 20.97, 4.34, 19.01, 4.69, 4.69],
+              "houses": [10, 9, 8, 11, 9, 12, 5, 4, 10],
+              "retrograde": [false, false, false, false, false, false, true, true, true]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-york-karka-simha-boundary",
+      "request": {
+        "contract_version": "1.0",
+        "location": {
+          "latitude": 40.7128,
+          "longitude": -74.006,
+          "timezone": "America/New_York"
+        },
+        "instants": [
+          "2026-09-08T08:44:00Z",
+          "2026-09-08T08:45:00Z"
+        ]
+      },
+      "expected": {
+        "ephemeris": "moshier",
+        "charts": [
+          {
+            "instant": "2026-09-08T08:44:00Z",
+            "lagna": {"rashi": "Karka", "degree": 29.81},
+            "planets": {
+              "names": ["Surya", "Chandra", "Kuja", "Budha", "Guru", "Shukra", "Shani", "Rahu", "Ketu"],
+              "rashis": ["Simha", "Karka", "Mithuna", "Kanya", "Karka", "Tula", "Meena", "Kumbha", "Simha"],
+              "degrees": [21.5, 15.23, 23.79, 1.8, 20.99, 4.44, 19.0, 4.68, 4.68],
+              "houses": [2, 1, 12, 3, 1, 4, 9, 8, 2],
+              "retrograde": [false, false, false, false, false, false, true, true, true]
+            }
+          },
+          {
+            "instant": "2026-09-08T08:45:00Z",
+            "lagna": {"rashi": "Simha", "degree": 0.01},
+            "planets": {
+              "names": ["Surya", "Chandra", "Kuja", "Budha", "Guru", "Shukra", "Shani", "Rahu", "Ketu"],
+              "rashis": ["Simha", "Karka", "Mithuna", "Kanya", "Karka", "Tula", "Meena", "Kumbha", "Simha"],
+              "degrees": [21.5, 15.24, 23.79, 1.8, 20.99, 4.44, 19.0, 4.68, 4.68],
+              "houses": [1, 12, 11, 2, 12, 3, 8, 7, 1],
+              "retrograde": [false, false, false, false, false, false, true, true, true]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "dst_fold_case": {
+    "id": "new-york-fall-back-distinct-instants",
+    "request": {
+      "contract_version": "1.0",
+      "location": {
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "timezone": "America/New_York"
+      },
+      "instants": [
+        "2026-11-01T01:30:00-04:00",
+        "2026-11-01T01:30:00-05:00"
+      ]
+    },
+    "expected_lagnas": [
+      {"rashi": "Simha", "degree": 3.4},
+      {"rashi": "Simha", "degree": 15.22}
+    ]
+  }
+}
