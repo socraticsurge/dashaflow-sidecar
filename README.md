@@ -10,15 +10,44 @@ turns valid root routes into application-level `404` responses.
 Used by [astro-unified-core](https://github.com/socraticsurge/astro-unified-core)
 via the `DASHAFLOW_SIDECAR_URL` environment variable.
 
+## License and corresponding source
+
+Copyright (C) 2026 Vinay Chaganti.
+
+This service is free software under the
+[GNU Affero General Public License v3.0 or later](LICENSE). Network users can
+obtain the complete corresponding source, including the dependency and build
+declarations needed to reproduce the service, from the
+[public source repository](https://github.com/socraticsurge/dashaflow-sidecar).
+The public `/` and `/health` responses expose that link and, on Vercel, link to
+the exact deployed Git revision. The OpenAPI document carries the same license
+and source offer.
+
+This software comes with no warranty. Direct dependency copyright and license
+notices, including DashaFlow, PySwissEph, and Swiss Ephemeris, are preserved in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Endpoints
 - `GET /health` — liveness check, returns DashaFlow version
 - `POST /calculate` — body `{date_of_birth, time_of_birth, latitude, longitude, timezone}`,
   returns the full DashaFlow chart (17 sections)
 - `POST /transit`, `/career`, `/compatibility`, and `/muhurtha` — legacy application
-  routes; their request, response, and authentication behavior is unchanged
+  contracts retained for the AstroChaganti server
 - `POST /v1/profile/derive` — minimal server-to-server birth-profile contract described below
 - `POST /v1/election-chart/derive` — bounded server-to-server election-chart batch
   described below
+
+Every `POST` calculation endpoint requires the same server-to-server bearer
+credential and returns `Cache-Control: private, no-store`. Only `/` and
+`/health` are public. The sidecar deliberately exposes no browser CORS policy;
+browser applications call it through an authenticated server gateway.
+
+All request bodies are rejected before JSON parsing when they exceed 16 KiB,
+and external validation and engine failures use fixed messages rather than
+dependency exception text. The legacy `/muhurtha` contract accepts an inclusive
+window of at most 31 days and rejects reversed ranges. Its old `birth_data`
+field is accepted for compatibility but optional because that calculation uses
+only `current_location_data`; new callers should omit it.
 
 ## Profile derivation contract (`1.0`)
 
@@ -94,9 +123,9 @@ text is returned.
 Set a high-entropy `DASHAFLOW_API_TOKEN` in the sidecar environment and send it
 as `Authorization: Bearer <token>`. Generate at least 32 and at most 256 visible
 ASCII characters; a 32-byte or longer random value encoded as hexadecimal or
-base64url is suitable. This authentication applies to the private
-`/v1/profile/derive` and `/v1/election-chart/derive` contracts; all legacy routes
-remain compatible. Missing, malformed, or incorrect credentials return `401`.
+base64url is suitable. This authentication applies to every calculation route:
+the two versioned `/v1` contracts and the five retained legacy contracts.
+Missing, malformed, or incorrect credentials return `401`.
 If `DASHAFLOW_API_TOKEN` itself is absent, shorter than 32 characters, longer
 than 256 characters, non-ASCII, or contains whitespace/control characters,
 either contract fails closed with `503`.
@@ -106,11 +135,11 @@ code or a `VITE_*` variable. Roll out in this order:
 
 1. Generate one independent secret and configure it as `DASHAFLOW_API_TOKEN` on
    the sidecar.
-2. Deploy and verify the sidecar health route and an authenticated contract call.
-3. Configure the same value in the server-side caller (currently
+2. Configure the same value in every server-side caller (currently
    `DASHAFLOW_SIDECAR_TOKEN`) together with `DASHAFLOW_SIDECAR_URL`.
-4. Deploy the caller and verify the public gateway; rotate both token settings
-   together when rotation is needed.
+3. Deploy and verify the callers against a credentialed sidecar Preview.
+4. Promote the coordinated caller and sidecar release; rotate both token
+   settings together when rotation is needed.
 
 The caller and sidecar intentionally share the same private-contract bounds:
 token length `32..256`, visible non-space ASCII only; contract version `1.0`;

@@ -1,6 +1,12 @@
 [project]
 name = "dashaflow-sidecar"
-version = "0.1.0"
+version = "0.2.0"
+description = "Authenticated DashaFlow calculation service for AstroChaganti"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+authors = [
+  { name = "Vinay Chaganti" },
+]
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.115.0",
@@ -9,6 +15,10 @@ dependencies = [
   "pyswisseph==2.10.3.2",
   "pytz==2026.3.post1",
 ]
+
+[project.urls]
+Source = "https://github.com/socraticsurge/dashaflow-sidecar"
+License = "https://github.com/socraticsurge/dashaflow-sidecar/blob/master/LICENSE"
 
 [tool.vercel]
 entrypoint = "api.index:app"
